@@ -514,8 +514,23 @@ export default function EntryDetail() {
   // A missing/null title must not throw during render and take the whole
   // page down; an empty chip still renders its CSS '·' separator, which
   // is what produced the doubled "· ·" in the byline.
-  const prevTitle = typeof prev?.title === 'string' ? prev.title : '';
-  const nextTitle = typeof next?.title === 'string' ? next.title : '';
+  // Untitled neighbours (updates usually have no title) get a readable
+  // label instead of an empty link.
+  const neighbourLabel = (n) => {
+    const t = typeof n?.title === 'string' ? n.title.trim() : '';
+    if (t) return t;
+    const type = typeof n?.type === 'string' ? n.type.trim() : '';
+    return type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Untitled';
+  };
+  const prevTitle = prev ? neighbourLabel(prev) : '';
+  const nextTitle = next ? neighbourLabel(next) : '';
+  // Category repeats the type more often than not ("photo" + "Photos",
+  // "journal" + "Journal"); show it only when it adds something.
+  const sameLabel = (x, y) => {
+    const norm = (v) => String(v || '').trim().toLowerCase().replace(/s$/, '');
+    return norm(x) !== '' && norm(x) === norm(y);
+  };
+  const showCategory = Boolean(entry.category && String(entry.category).trim()) && !sameLabel(entry.category, displayType);
   const firstTag = entry.tags
     ? entry.tags.split(',').map(t => t.trim()).find(Boolean) || ''
     : '';
@@ -624,7 +639,7 @@ export default function EntryDetail() {
             </span>
           ) : null}
 
-          {entry.category && (
+          {showCategory && (
             <span className="meta-chip inline-flex items-center gap-1.5 whitespace-nowrap shrink-0">
               <span>{entry.category}</span>
             </span>

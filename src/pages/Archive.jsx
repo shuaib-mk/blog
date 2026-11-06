@@ -299,7 +299,9 @@ export default function Archive() {
               Archive is empty.
             </div>
           ) : (
-            Object.keys(archiveTree).map(year => (
+            // Newest first. Object.keys() always lists number-like keys
+            // ("2025", "2026") in ascending order, so sort explicitly.
+            Object.keys(archiveTree).sort((x, y) => Number(y) - Number(x)).map(year => (
               <div key={year} className="border-b border-[var(--border-subtle)] pb-8">
                 <TypewriterText
                   text={year}
@@ -307,7 +309,7 @@ export default function Archive() {
                   className="text-2xl font-serif font-medium mb-4 text-[var(--text-primary)]"
                 />
                 <ul className="space-y-2 text-sm font-sans">
-                  {Object.keys(archiveTree[year]).map(monthNum => {
+                  {Object.keys(archiveTree[year]).sort((x, y) => Number(y) - Number(x)).map(monthNum => {
                     const monthItem = archiveTree[year][monthNum];
                     return (
                       <li key={monthNum} className="flex items-center space-x-3">

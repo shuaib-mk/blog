@@ -1545,7 +1545,9 @@ app.get('/api/posts/:slug', async (req, res) => {
       }
     }
     if (error || !data || data.length === 0) {
-      if (slug === 'protected-sample-entry') {
+      // Built-in sample entries are test fixtures only; on the live site a
+      // missing slug is a plain 404.
+      if (slug === 'protected-sample-entry' && process.env.NODE_ENV === 'test') {
         return res.json({
           entry: {
             id: '00000000-0000-0000-0000-000000000002',
@@ -1564,7 +1566,7 @@ app.get('/api/posts/:slug', async (req, res) => {
         });
       }
 
-      if (slug === 'sample-entry' || process.env.NODE_ENV === 'test') {
+      if (process.env.NODE_ENV === 'test') {
         return res.json({
           entry: {
             id: '00000000-0000-0000-0000-000000000001',
@@ -2304,7 +2306,9 @@ app.get('/api/posts/:id/reactions', async (req, res) => {
 
     if (error && error.code !== 'PGRST116') throw error;
 
-    const counts = { thoughtful: 0, cozy: 0, loved: 0, inspiring: 0 };
+    // Same buttons the site shows (and POST counts): thoughtful / loved /
+    // boring / dislike. cozy / inspiring stay for older stored rows.
+    const counts = { thoughtful: 0, loved: 0, boring: 0, dislike: 0, cozy: 0, inspiring: 0 };
     (reactions || []).forEach(r => {
       if (counts[r.reaction_type] !== undefined) {
         counts[r.reaction_type]++;

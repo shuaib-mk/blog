@@ -23,8 +23,20 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// Register PWA service worker cleanly for installability and offline support
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator && process.env.NODE_ENV !== 'test') {
+// Register PWA service worker cleanly for installability and offline support.
+// Production builds only: in `vite` dev the worker's stale-while-revalidate
+// cache served the previous version of edited source files once.
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env.DEV) {
+  // Clear any worker (and its cache) left over from earlier dev sessions.
+  navigator.serviceWorker.getRegistrations()
+    .then((regs) => regs.forEach((reg) => reg.unregister()))
+    .catch(() => {});
+  if (window.caches) {
+    window.caches.keys().then((keys) => keys.forEach((key) => window.caches.delete(key))).catch(() => {});
+  }
+}
+
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env.PROD && process.env.NODE_ENV !== 'test') {
   const registerSW = () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
   };
