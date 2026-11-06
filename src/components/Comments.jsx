@@ -29,6 +29,32 @@ export default function Comments({ postId, passcode }) {
 
   const loadComments = useCallback(async () => {
     if (!postId) return;
+    // An unlocked passcode post: its comments are only readable through the
+    // server, which checks the passcode (the public table hides them).
+    if (passcode) {
+      try {
+        const res = await fetch(`/api/posts/${encodeURIComponent(postId)}/comments`, {
+          headers: { 'x-entry-passcode': passcode }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const list = await res.json();
+        if (mountedRef.current) {
+          setComments(Array.isArray(list) ? list : []);
+          hasLoadedRef.current = true;
+          setLoadFailed(false);
+          setLoading(false);
+        }
+      } catch {
+        if (mountedRef.current) {
+          if (!hasLoadedRef.current) {
+            setComments([]);
+            setLoadFailed(true);
+          }
+          setLoading(false);
+        }
+      }
+      return;
+    }
     try {
       let realPostId = postId;
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(postId);
@@ -63,7 +89,7 @@ export default function Comments({ postId, passcode }) {
         setLoading(false);
       }
     }
-  }, [postId]);
+  }, [postId, passcode]);
 
   useEffect(() => {
     if (!postId) return;
@@ -159,6 +185,8 @@ export default function Comments({ postId, passcode }) {
     setContent('');
 
     let realComment = null;
+    let serverReached = false;
+    let serverError = null;
 
     try {
       const res = await fetch(`/api/posts/${postId}/comments`, {
@@ -166,12 +194,26 @@ export default function Comments({ postId, passcode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ author_name: name, content: trimmedContent, passcode: passcode || undefined })
       });
+      serverReached = true;
 
       if (res.ok) {
         realComment = await res.json();
+      } else {
+        const body = await res.json().catch(() => null);
+        serverError = (body && body.error) || 'Failed posting comment.';
       }
     } catch {
-      // API call failed, fallback to direct Supabase
+      // The server could not be reached at all: fall back to Supabase below.
+    }
+
+    // The server answered "no" (too long, too fast, locked post…): show its
+    // reason. Writing straight to the database instead would skip those checks.
+    if (serverReached && !realComment) {
+      setComments(prev => prev.filter(c => c.id !== tempId));
+      setContent(trimmedContent);
+      toastError(serverError || 'Failed posting comment.');
+      setSubmitting(false);
+      return;
     }
 
     if (!realComment) {
@@ -209,7 +251,8 @@ export default function Comments({ postId, passcode }) {
         type: 'comment',
         op: 'INSERT',
         postId,
-        comment: realComment
+        // Listeners only reload; a locked post's text stays out of the broadcast.
+        ...(passcode ? {} : { comment: realComment })
       });
     }
     setSubmitting(false);

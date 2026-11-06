@@ -15,8 +15,8 @@ describe('Admin PWA App Specification Tests', () => {
     server = http.createServer((req, res) => {
       // Simple static file handler for public files in test
       const publicDir = path.resolve(process.cwd(), 'public');
-      if (req.url === '/manifest.json') {
-        const content = fs.readFileSync(path.join(publicDir, 'manifest.json'), 'utf8');
+      if (req.url === '/manifest.json' || req.url === '/manifest-admin.json') {
+        const content = fs.readFileSync(path.join(publicDir, req.url.slice(1)), 'utf8');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(content);
       }
@@ -36,9 +36,9 @@ describe('Admin PWA App Specification Tests', () => {
     }
   });
 
-  test('1. manifest.json is valid and configured specifically for Admin space', async () => {
+  test('1. manifest-admin.json is valid and configured specifically for Admin space', async () => {
     const res = await new Promise((resolve, reject) => {
-      http.get(`http://127.0.0.1:${PORT}/manifest.json`, (r) => {
+      http.get(`http://127.0.0.1:${PORT}/manifest-admin.json`, (r) => {
         let body = '';
         r.on('data', chunk => { body += chunk; });
         r.on('end', () => resolve({ status: r.statusCode, body }));
@@ -57,6 +57,22 @@ describe('Admin PWA App Specification Tests', () => {
 
     const hasNewJournalShortcut = manifest.shortcuts.some(s => s.url.includes('/admin/new?type=journal'));
     assert.strictEqual(hasNewJournalShortcut, true, 'Shortcuts must include quick journal entry launcher');
+  });
+
+  test('1b. public manifest.json installs the blog, and admin pages link the admin manifest', async () => {
+    const manifest = JSON.parse(fs.readFileSync(path.resolve('public/manifest.json'), 'utf8'));
+    assert.strictEqual(manifest.start_url, '/', 'Visitors installing the site get the blog home');
+    assert.notStrictEqual(manifest.id, '/admin', 'Public app must not share the admin app identity');
+    assert.ok(!(manifest.shortcuts || []).some(s => s.url.startsWith('/admin')), 'Public app has no admin shortcuts');
+
+    const html = await new Promise((resolve, reject) => {
+      http.get(`http://127.0.0.1:${PORT}/admin/dashboard`, (r) => {
+        let body = '';
+        r.on('data', chunk => { body += chunk; });
+        r.on('end', () => resolve(body));
+      }).on('error', reject);
+    });
+    assert.ok(html.includes('<link rel="manifest" href="/manifest-admin.json"'), 'Admin pages must link the admin manifest');
   });
 
   test('2. sw.js is served with proper cache-bypassing for APIs', async () => {

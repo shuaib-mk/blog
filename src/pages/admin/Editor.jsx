@@ -738,6 +738,8 @@ export default function Editor() {
     const method = id ? 'PUT' : 'POST';
 
     let savedData = null;
+    let serverReached = false;
+    let serverError = null;
 
     try {
       const res = await fetch(url, {
@@ -748,12 +750,29 @@ export default function Editor() {
         },
         body: JSON.stringify(payload)
       });
+      serverReached = true;
 
       if (res.ok) {
         savedData = await res.json();
+      } else {
+        const body = await res.json().catch(() => null);
+        serverError = (body && body.error)
+          || (res.status === 413 ? 'This entry is too large to save (large pasted images?). Upload images instead of pasting them.' : null)
+          || (res.status === 401 ? 'Your login expired. Log in again, then save.' : null)
+          || `Save failed (error ${res.status}).`;
       }
     } catch {
-      // API request failed, fallback to Supabase directly
+      // The server could not be reached at all: fall back to Supabase below.
+    }
+
+    // The server answered but refused the save: show why and keep the edits.
+    // Saving straight to the database instead skipped the server's image
+    // handling (pasted images could end up stored as text inside the post).
+    if (serverReached && !savedData) {
+      toastError(serverError || 'Failed saving entry.');
+      setSaving(false);
+      isSavingRef.current = false;
+      return;
     }
 
     if (!savedData) {
@@ -761,6 +780,10 @@ export default function Editor() {
         const finalTitle = payload.title || (payload.content.length > 30 ? payload.content.slice(0, 30) + '...' : 'Update');
         const finalSlug = payload.slug || finalTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
 
+        // Offline fallback: never write image bytes into the post body.
+        if (/\(data:[a-z]+\/[a-z0-9.+-]+;base64,/i.test(payload.content || '') || /src=["']data:/i.test(payload.content || '')) {
+          throw new Error('The server is unreachable and this entry has pasted images, which only the server can store. Try again when you are back online.');
+        }
         const supaPayload = {
           title: finalTitle,
           slug: finalSlug,

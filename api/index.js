@@ -68,10 +68,17 @@ async function resolveEngagementTarget(req, identifier, suppliedPasscode) {
       code: code.trim()
     });
     const result = Array.isArray(data) ? data[0] : data;
-    if (result && result.unlocked) return { postId: pub.id };
+    if (result && result.unlocked) return { postId: pub.id, isProtected: true, passcode: code.trim() };
   }
 
   return { status: 403, error: 'This entry is passcode-protected.' };
+}
+
+// The passcode-checked database functions (migration
+// 20261107000000_lock_protected_post_engagement.sql). Until that migration is
+// applied they don't exist, and callers fall back to the old direct path.
+function isMissingDbFunction(error) {
+  return Boolean(error) && (error.code === 'PGRST202' || error.code === '42883' || /could not find the function|function .* does not exist/i.test(error.message || ''));
 }
 
 const storage = multer.memoryStorage();
@@ -2341,11 +2348,24 @@ app.post('/api/posts/:id/reactions', async (req, res) => {
     if (!target.postId) return res.status(target.status).json({ error: target.error });
     const postId = target.postId;
 
-    const { error } = await getSupabaseClient(req)
-      .from('reactions')
-      .insert([{ post_id: postId, reaction_type }]);
+    let usedLockedPath = false;
+    if (target.isProtected && target.passcode) {
+      const { data: saved, error: lockedErr } = await getSupabaseClient(req)
+        .rpc('add_protected_reaction', { target_identifier: String(postId), code: target.passcode, p_reaction_type: reaction_type });
+      if (!lockedErr) {
+        usedLockedPath = true;
+        if (saved === false) return res.status(403).json({ error: 'This entry is passcode-protected.' });
+      } else if (!isMissingDbFunction(lockedErr)) {
+        throw lockedErr;
+      }
+    }
 
-    if (error) throw error;
+    if (!usedLockedPath) {
+      const { error } = await getSupabaseClient(req)
+        .from('reactions')
+        .insert([{ post_id: postId, reaction_type }]);
+      if (error) throw error;
+    }
 
     const { data: allReactions } = await getSupabaseClient(req)
       .from('reactions')
@@ -2388,6 +2408,15 @@ app.get('/api/posts/:id/comments', async (req, res) => {
     const target = await resolveEngagementTarget(req, id);
     if (!target.postId) return res.status(target.status).json({ error: target.error });
     const postId = target.postId;
+
+    // Locked post opened with its passcode: read through the passcode-checked
+    // function (comments on locked posts are hidden from the public table).
+    if (target.isProtected && target.passcode) {
+      const { data: locked, error: lockedErr } = await getSupabaseClient(req)
+        .rpc('get_protected_comments', { target_identifier: String(postId), code: target.passcode });
+      if (!lockedErr) return res.json(locked || []);
+      if (!isMissingDbFunction(lockedErr)) throw lockedErr;
+    }
 
     const { data: comments, error } = await getSupabaseClient(req)
       .from('comments')
@@ -2433,18 +2462,37 @@ app.post('/api/posts/:id/comments', async (req, res) => {
 
     const name = rawName || 'Anonymous Reader';
 
-    const { data, error } = await getSupabaseClient(req)
-      .from('comments')
-      .insert([{ post_id: postId, author_name: name, content: rawContent }])
-      .select('*')
-      .single();
+    let data = null;
+    let usedLockedPath = false;
+    if (target.isProtected && target.passcode) {
+      const { data: rows, error: lockedErr } = await getSupabaseClient(req)
+        .rpc('add_protected_comment', { target_identifier: String(postId), code: target.passcode, p_author_name: name, p_content: rawContent });
+      if (!lockedErr) {
+        usedLockedPath = true;
+        data = Array.isArray(rows) ? rows[0] : rows;
+        if (!data) return res.status(403).json({ error: 'This entry is passcode-protected.' });
+      } else if (!isMissingDbFunction(lockedErr)) {
+        throw lockedErr;
+      }
+    }
 
-    if (error) throw error;
+    if (!usedLockedPath) {
+      const inserted = await getSupabaseClient(req)
+        .from('comments')
+        .insert([{ post_id: postId, author_name: name, content: rawContent }])
+        .select('*')
+        .single();
+      if (inserted.error) throw inserted.error;
+      data = inserted.data;
+    }
 
+    // Live notice for other readers. Every listener just reloads the list, so
+    // a locked post's comment text is left out: the broadcast reaches all
+    // visitors, including those without the passcode.
     await settleBroadcast('comment_created', {
       op: 'INSERT',
       postId,
-      comment: data
+      ...(target.isProtected ? {} : { comment: data })
     });
 
     res.status(201).json(data);
@@ -2685,7 +2733,7 @@ export async function getEffectiveShowViews(supabase) {
 }
 
 // Serve application HTML with injected site default theme and view count visibility to guarantee zero flash
-async function serveInjectedHtml(req, res, extraHead = '', pageMeta = null) {
+async function serveInjectedHtml(req, res, extraHead = '', pageMeta = null, { status = 200 } = {}) {
   let html = '';
   try {
     html = fs.readFileSync(path.join(process.cwd(), 'dist', 'index.html'), 'utf8');
@@ -2808,6 +2856,39 @@ async function serveInjectedHtml(req, res, extraHead = '', pageMeta = null) {
     if (pageMeta.description) html = html.replace(/<meta name="description"[^>]*>/i, `<meta name="description" content="${esc(pageMeta.description)}" />`);
   }
 
+  // Admin pages link the admin app manifest; the public site links the
+  // public one, so visitors who install the site get the blog, not the
+  // admin login.
+  if (/^\/admin(\/|$)/.test(req.path || '')) {
+    html = html.replace(/(<link rel="manifest" href=")\/manifest\.json(")/i, '$1/manifest-admin.json$2');
+  }
+
+  // Default link-preview tags (WhatsApp, Twitter, Slack…) for pages that
+  // don't bring their own — the home page and section pages. Entry pages
+  // pass their own og: tags in extraHead.
+  if (!/property="og:title"/.test(extraHead || '')) {
+    const escAttr = (str) => String(str || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+    const unesc = (str) => String(str || '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    const pageTitle = unesc((html.match(/<title>([\s\S]*?)<\/title>/i) || [])[1] || 'q04ti').trim();
+    const pageDesc = unesc((html.match(/<meta name="description" content="([^"]*)"/i) || [])[1] || '');
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+    const origin = host ? `${proto}://${host}` : '';
+    const pagePath = (req.path || '/').replace(/[^\w\-./~%]/g, '');
+    const siteTags = `
+        <meta property="og:site_name" content="${escAttr(authorName || 'q04ti')}" />
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content="${escAttr(pageTitle)}" />
+        ${pageDesc ? `<meta property="og:description" content="${escAttr(pageDesc)}" />` : ''}
+        ${origin ? `<meta property="og:url" content="${escAttr(origin + pagePath)}" />` : ''}
+        ${origin ? `<meta property="og:image" content="${escAttr(origin)}/icon-512.png" />` : ''}
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="${escAttr(pageTitle)}" />
+        ${pageDesc ? `<meta name="twitter:description" content="${escAttr(pageDesc)}" />` : ''}
+      `;
+    extraHead = `${siteTags}${extraHead || ''}`;
+  }
+
   const syncScript = `<script>window.__SITE_SHOW_VIEWS__=${effectiveShowViews ? 'true' : 'false'};window.__SITE_AUTHOR_NAME__=${JSON.stringify(authorName)};</script>`;
   if (extraHead) {
     html = html.replace('</head>', `${syncScript}${extraHead}</head>`);
@@ -2821,19 +2902,30 @@ async function serveInjectedHtml(req, res, extraHead = '', pageMeta = null) {
   res.setHeader('Set-Cookie', `site_default_theme=${defaultTheme}; Path=/; Max-Age=31536000; SameSite=Lax`);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
-  return res.send(html);
+  return res.status(status).send(html);
 }
 
 // SSR for Open Graph (OG) tags on /entry/:slug (Link Previews for WhatsApp, Twitter, etc.)
 app.get('/entry/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
-    const { data: posts } = await getSupabaseClient(req)
+    const { data: posts, error: postsError } = await getSupabaseClient(req)
       .from('public_published_entries')
       .select('id, title, excerpt, cover_image, has_passcode')
       .eq('slug', slug);
 
     const post = posts && posts[0];
+
+    // A slug that positively doesn't exist answers 404 (the page still shows
+    // "Entry Not Found"), so search engines don't index empty pages. Any
+    // lookup error keeps 200: never 404 a real post because of a hiccup.
+    let notFound = false;
+    if (!post && !postsError && Array.isArray(posts)) {
+      const unlisted = await getSupabaseClient(req)
+        .from('entries').select('id').eq('status', 'unlisted').eq('slug', slug).limit(1);
+      const unlistedHidden = unlisted.error && (unlisted.error.code === '42501' || /permission denied/i.test(unlisted.error.message || ''));
+      notFound = unlistedHidden || (!unlisted.error && (!unlisted.data || unlisted.data.length === 0));
+    }
     let ogTags = '';
     if (post && !post.has_passcode) {
       const escapeHtml = (str) => String(str || '').replace(/[&<>"']/g, match => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[match]);
@@ -2869,7 +2961,7 @@ app.get('/entry/:slug', async (req, res) => {
       title: `${post.title || 'Untitled'} — q04ti`,
       description: post.excerpt || ''
     } : null;
-    return serveInjectedHtml(req, res, ogTags, pageMeta);
+    return serveInjectedHtml(req, res, ogTags, pageMeta, { status: notFound ? 404 : 200 });
   } catch (err) {
     console.error('OG Tag Error:', err);
     return res.redirect(`/?entry=${req.params.slug}`);
@@ -2945,8 +3037,12 @@ app.get(['/robots.txt', '/api/robots.txt'], (req, res) => {
 });
 
 // Catch-all SPA route handler for all non-API HTML routes with zero theme flash
+// Pages the app actually has (mirrors the <Route>s in src/App.jsx). Anything
+// else still gets the app shell (it shows the 404 page) but with a real 404
+// status, so search engines don't index broken links as empty pages.
+const KNOWN_PAGE = /^\/(?:(?:journal|writing|photos|updates|archive|activity|about)\/?)?$|^\/admin(?:\/.*)?$/;
 app.get(/^(?!\/api).*/, async (req, res) => {
-  return serveInjectedHtml(req, res);
+  return serveInjectedHtml(req, res, '', null, { status: KNOWN_PAGE.test(req.path) ? 200 : 404 });
 });
 
 export default app;
