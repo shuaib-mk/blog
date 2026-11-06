@@ -1,12 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useTypewriter } from '../context/TypewriterContext';
-
-// Text already typed out once during this visit appears instantly after
-// that: going back to a page (or between posts) used to replay every
-// heading and excerpt each time, which made the site feel slow even when
-// the data was already there. Per tab, in memory; a reload starts fresh.
-const typedThisVisit = new Set();
-const MAX_REMEMBERED = 2000;
 
 export default function TypewriterText({
   text,
@@ -21,10 +14,10 @@ export default function TypewriterText({
   const { typewriterEnabled } = useTypewriter();
   const content = text !== undefined && text !== null ? String(text) : (typeof children === 'string' ? children : '');
 
-  // First paint shows the full text: the reveal effect (below) resets to 0
-  // and types out only after mount, so a heading never reads truncated
-  // mid-animation ("Chronolo") on its first paint. The animation itself is
-  // unchanged — it still runs from 0 to full on every content change.
+  // Starts at full length; the reveal (below) resets it to 0 in a layout
+  // effect, which runs before the browser paints, so the full text is never
+  // shown and then wiped (the old useEffect let one or two frames of the
+  // full text paint first, then blanked it and typed it back in).
   const [visibleCount, setVisibleCount] = useState(() => content.length);
   const [isComplete, setIsComplete] = useState(false);
   const animFrameRef = useRef(null);
@@ -39,12 +32,11 @@ export default function TypewriterText({
     window.matchMedia &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Decided once per mounted text: already-seen text never animates (and so
-  // never flickers full -> empty -> typed).
-  const alreadyTyped = typedThisVisit.has(content);
-  const shouldAnimate = typewriterEnabled && !isReducedMotion && Boolean(content) && !alreadyTyped;
+  // Types every time the text is shown while the effect is on; the admin
+  // default and the header toggle are the way to turn it off.
+  const shouldAnimate = typewriterEnabled && !isReducedMotion && Boolean(content);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!shouldAnimate) {
       setVisibleCount(content.length);
       setIsComplete(true);
@@ -86,8 +78,6 @@ export default function TypewriterText({
       if (progress < 1) {
         animFrameRef.current = requestAnimationFrame(step);
       } else {
-        if (typedThisVisit.size >= MAX_REMEMBERED) typedThisVisit.clear();
-        typedThisVisit.add(content);
         setVisibleCount(N);
         setIsComplete(true);
         if (onCompleteRef.current) onCompleteRef.current();

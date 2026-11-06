@@ -1,5 +1,5 @@
 /* global NodeFilter */
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { useTypewriter } from '../context/TypewriterContext';
 
 export function useTypewriterEffect(containerRef, contentDependency, options = {}) {
@@ -7,7 +7,9 @@ export function useTypewriterEffect(containerRef, contentDependency, options = {
   const animFrameRef = useRef(null);
   const { maxDuration = 500, delay = 0 } = options;
 
-  useEffect(() => {
+  // Layout effect: the text has to be hidden before the first paint, or the
+  // whole post flashes in full and then blanks out before typing.
+  useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
