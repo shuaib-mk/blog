@@ -2867,6 +2867,11 @@ async function serveInjectedHtml(req, res, extraHead = '', pageMeta = null, { st
     html = html.replace(/(<link rel="manifest" href=")\/manifest\.json(")/i, '$1/manifest-admin.json$2');
   }
 
+  // index.html carries static default preview tags for the home page, which
+  // Vercel serves as a plain file. Pages rendered here get their own tags
+  // below instead, so drop the static block to avoid duplicate og:title.
+  html = html.replace(/[ \t]*<!-- default-preview:start[\s\S]*?<!-- default-preview:end -->\r?\n?/, '');
+
   // Default link-preview tags (WhatsApp, Twitter, Slack…) for pages that
   // don't bring their own — the home page and section pages. Entry pages
   // pass their own og: tags in extraHead.
