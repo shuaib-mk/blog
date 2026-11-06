@@ -198,9 +198,7 @@ export default function About() {
           {/* Projects */}
           {aboutData.projects && aboutData.projects.length > 0 && (
             <section className="pt-6 border-t border-[var(--border-subtle)]">
-              <h2 className="text-xs font-sans uppercase tracking-widest text-[var(--text-muted)] font-medium mb-6">
-                Projects & Work
-              </h2>
+              <TypewriterText text="Projects & Work" as="h2" className="text-xs font-sans uppercase tracking-widest text-[var(--text-muted)] font-medium mb-6" />
               <div className="space-y-6">
                 {aboutData.projects.map((proj, idx) => (
                   <div key={idx} className="group">
@@ -212,16 +210,14 @@ export default function About() {
                           rel="noopener noreferrer"
                           className="hover:text-[var(--accent-warm)] transition-colors underline underline-offset-4 decoration-[var(--border-subtle)]"
                         >
-                          {proj.title}
+                          <TypewriterText text={proj.title} />
                         </a>
                       ) : (
-                        proj.title
+                        <TypewriterText text={proj.title} />
                       )}
                     </h3>
                     {proj.description && (
-                      <p className="text-sm font-serif text-[var(--text-secondary)] mt-1">
-                        {proj.description}
-                      </p>
+                      <TypewriterText text={proj.description} as="p" className="text-sm font-serif text-[var(--text-secondary)] mt-1" />
                     )}
                   </div>
                 ))}
@@ -232,9 +228,7 @@ export default function About() {
           {/* Links */}
           {aboutData.links && aboutData.links.length > 0 && (
             <section className="pt-6 border-t border-[var(--border-subtle)]">
-              <h2 className="text-xs font-sans uppercase tracking-widest text-[var(--text-muted)] font-medium mb-4">
-                Links & Contact
-              </h2>
+              <TypewriterText text="Links & Contact" as="h2" className="text-xs font-sans uppercase tracking-widest text-[var(--text-muted)] font-medium mb-4" />
               <ul className="flex flex-wrap gap-6 text-sm font-sans">
                 {aboutData.links.map((link, idx) => (
                   <li key={idx}>
@@ -244,7 +238,7 @@ export default function About() {
                       rel="noopener noreferrer"
                       className="text-[var(--text-primary)] hover:text-[var(--accent-warm)] underline underline-offset-4"
                     >
-                      {link.label}
+                      <TypewriterText text={link.label} />
                     </a>
                   </li>
                 ))}

@@ -218,7 +218,13 @@ export function broadcastRealtimeEvent(event, data = {}, supabaseClient = null) 
   const clientToUse = supabaseClient || (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null);
   if (!clientToUse || typeof clientToUse.from !== 'function') return Promise.resolve();
   const bStart = Date.now();
+  // High-frequency notices (every post view, every now-playing ping) must not
+  // overwrite the shared 'latest' row: the clients' 10s sync-check fallback
+  // only sees that one row, so a view or music update right after an edit
+  // hid the edit from any device that missed the live broadcast.
+  const skipLatestRow = event === 'entry_view_updated' || event === 'now_playing_updated';
   const upsertPromise = (async () => {
+    if (skipLatestRow) return;
     try {
       await clientToUse.from('realtime_sync').upsert({
         id: 'latest',
