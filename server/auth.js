@@ -41,6 +41,12 @@ export async function verifyAdminUser(req) {
       new Promise((_, reject) => setTimeout(() => reject(new Error('auth-timeout')), 5000))
     ]);
 
+    // The auth service itself failing (timeout / 5xx) is not a bad token:
+    // still deny, but say the service is unavailable.
+    if (error && (error.isTimeout || error.message === 'Auth timeout' || error.status >= 500)) {
+      return { authorized: false, status: 503, error: 'Authentication service unavailable. Fail closed.' };
+    }
+
     if (error || !data || !data.user) {
       return { authorized: false, status: 401, error: 'Invalid or expired token.' };
     }

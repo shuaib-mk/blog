@@ -138,7 +138,13 @@ export function ThemeProvider({ children }) {
     if (supabase && typeof supabase.channel === 'function') {
       try {
         channel = supabase
-          .channel('theme-sync-channel')
+          // A fresh topic per subscription: supabase.channel() hands back an
+          // existing channel with the same name, and the one this effect just
+          // unsubscribed is still registered until its leave completes, so
+          // re-running the effect got that dying channel back, .on() threw
+          // ("cannot add callbacks after subscribe()"), and the catch below
+          // hid it: live admin changes stopped reaching open pages.
+          .channel(`theme-sync-channel:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'realtime_sync', filter: 'id=eq.site_settings' }, (payload) => {
             const newDefault = payload?.new?.payload?.default_theme;
             if (newDefault === 'light' || newDefault === 'dark') {
@@ -171,8 +177,11 @@ export function ThemeProvider({ children }) {
       window.removeEventListener('about-data-updated', handleAboutUpdate);
       window.removeEventListener('site-settings-updated', handleAboutUpdate);
       window.removeEventListener('storage', handleStorage);
-      if (channel && typeof channel.unsubscribe === 'function') {
-        channel.unsubscribe();
+      if (channel) {
+        try {
+          if (typeof supabase.removeChannel === 'function') supabase.removeChannel(channel);
+          else if (typeof channel.unsubscribe === 'function') channel.unsubscribe();
+        } catch {}
       }
     };
   }, [siteDefaultTheme]);
