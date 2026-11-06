@@ -108,6 +108,8 @@ export default function Reactions({ postId, passcode }) {
 
     let updatedCounts = null;
     let posted = false;
+    let serverReached = false;
+    let serverError = null;
 
     try {
       const res = await fetch(`/api/posts/${postId}/reactions`, {
@@ -115,13 +117,17 @@ export default function Reactions({ postId, passcode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reaction_type: type, passcode: passcode || undefined })
       });
+      serverReached = true;
 
       if (res.ok) {
         updatedCounts = await res.json();
         posted = true;
+      } else {
+        const body = await res.json().catch(() => null);
+        serverError = body && body.error;
       }
     } catch {
-      // API call failed, fallback to direct Supabase insert
+      // The server could not be reached at all: fall back to Supabase below.
     }
 
     if (posted && updatedCounts && typeof updatedCounts === 'object') {
@@ -136,8 +142,9 @@ export default function Reactions({ postId, passcode }) {
       // The server accepted the reaction but returned no usable counts;
       // refresh the real counts instead of trusting the optimistic +1.
       loadReactions();
-    } else if (!posted) {
-      // Direct Supabase fallback
+    } else if (!posted && !serverReached) {
+      // Direct Supabase fallback — only when the server was unreachable. When
+      // it answered "no" (too fast, locked post…), its checks stand.
       try {
         let realPostId = postId;
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(postId);
@@ -176,7 +183,7 @@ export default function Reactions({ postId, passcode }) {
           localStorage.setItem(`reacted_${postId}`, JSON.stringify(reverted));
         }
       } catch (_e) {}
-      toastError('Couldn’t save your reaction. Try again.');
+      toastError(serverError || 'Couldn’t save your reaction. Try again.');
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useLayoutEffect } from 'react';
+import React, { Suspense, lazy, useEffect, useLayoutEffect } from 'react';
 import { Routes, Route, useLocation, useNavigationType } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -72,6 +72,24 @@ function ScrollToTop() {
 export default function App() {
   const location = useLocation();
   const isAdminPath = location.pathname.startsWith('/admin');
+
+  // Admin pages use the admin app manifest, public pages the public one (the
+  // server does the same for the first page load), so installing from the
+  // blog gives visitors the blog and the dashboard keeps the admin app.
+  useEffect(() => {
+    try {
+      const link = document.querySelector('link[rel="manifest"]');
+      const want = isAdminPath ? '/manifest-admin.json' : '/manifest.json';
+      if (link && link.getAttribute('href') !== want) {
+        link.setAttribute('href', want);
+        // An install prompt captured for the other manifest would install the
+        // wrong app (e.g. the public blog from the admin dashboard's button).
+        // Drop it; the browser offers a new one for this manifest, which
+        // usePWAInstall picks up from its beforeinstallprompt listener.
+        window.deferredInstallPrompt = null;
+      }
+    } catch {}
+  }, [isAdminPath]);
 
   return (
     <div className="min-h-screen flex flex-col justify-between">

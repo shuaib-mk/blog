@@ -552,10 +552,8 @@ export default function EntryDetail() {
       url: window.location.href
     };
     
-    try {
-      if (navigator.share) {
-        await navigator.share(shareData);
-      } else {
+    const copyLink = async () => {
+      try {
         await navigator.clipboard.writeText(shareData.url);
         const btn = document.getElementById('share-btn-text');
         if (btn) {
@@ -563,10 +561,23 @@ export default function EntryDetail() {
           btn.innerText = 'Copied!';
           setTimeout(() => { btn.innerText = original; }, 2000);
         }
+      } catch (_e) {
+        // Clipboard blocked too: nothing more we can do quietly.
       }
-    } catch (_e) {
-      // AbortError is normal if user cancels the share dialog
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (e) {
+        // The reader closed the share sheet: done. Any other failure (share
+        // unsupported here, blocked, no share targets) copies the link instead
+        // of silently doing nothing.
+        if (e && e.name === 'AbortError' && !/fail/i.test(e.message || '')) return;
+      }
     }
+    await copyLink();
 
   };
 

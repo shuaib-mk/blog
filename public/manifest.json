@@ -1,16 +1,23 @@
 {
-  "name": "Journal & Diary Admin",
-  "short_name": "Journal",
-  "description": "Personal digital diary, daily updates, and journal admin space.",
-  "id": "/admin",
-  "start_url": "/admin/dashboard",
+  "name": "q04ti",
+  "short_name": "q04ti",
+  "description": "Journal, writing, photos and an archive by q04ti.",
+  "id": "/",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait-primary",
   "background_color": "#121212",
   "theme_color": "#121212",
-  "categories": ["productivity", "lifestyle", "utilities"],
+  "categories": [
+    "lifestyle",
+    "personalization"
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -35,29 +42,6 @@
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any"
-    }
-  ],
-  "shortcuts": [
-    {
-      "name": "New Journal Entry",
-      "short_name": "New Entry",
-      "description": "Write a new journal entry",
-      "url": "/admin/new?type=journal",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Post Photo",
-      "short_name": "Photo",
-      "description": "Upload a photo to gallery",
-      "url": "/admin/new?type=photo",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Admin Dashboard",
-      "short_name": "Dashboard",
-      "description": "View all entries & stats",
-      "url": "/admin/dashboard",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
