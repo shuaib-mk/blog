@@ -18,7 +18,7 @@ function mockFetch(script) {
 const json = (obj, status = 200) => ({ ok: status < 400, status, json: async () => obj, text: async () => JSON.stringify(obj) });
 
 test('a full first bucket is skipped and the file lands in the next one', async () => {
-  const calls = mockFetch((url, opts, all) => {
+  const calls = mockFetch((url, opts) => {
     if (url === '/api/b2-upload') {
       const excl = JSON.parse(opts.body).excludeBuckets;
       const bucket = excl.includes('q04ti-media-1') ? 'q04ti-media-2' : 'q04ti-media-1';

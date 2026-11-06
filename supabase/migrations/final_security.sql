@@ -256,7 +256,7 @@ DROP POLICY IF EXISTS "Admin strict write delete reactions" ON public.reactions;
 CREATE POLICY "Public can view reactions" ON public.reactions FOR SELECT TO anon, authenticated USING (true);
 
 CREATE POLICY "Public can add reactions" ON public.reactions FOR INSERT TO anon, authenticated
-  WITH CHECK (reaction_type IN ('thoughtful', 'cozy', 'loved', 'inspiring'));
+  WITH CHECK (reaction_type IN ('thoughtful', 'loved', 'boring', 'dislike', 'cozy', 'inspiring'));
 
 CREATE POLICY "Admin strict write delete reactions" ON public.reactions FOR ALL TO authenticated
   USING (public.is_admin());
@@ -403,7 +403,7 @@ DECLARE
   v_client_ip TEXT := 'anon_shared_fallback';
   v_allowed BOOLEAN;
 BEGIN
-  IF NEW.reaction_type NOT IN ('thoughtful', 'cozy', 'loved', 'inspiring') THEN
+  IF NEW.reaction_type NOT IN ('thoughtful', 'loved', 'boring', 'dislike', 'cozy', 'inspiring') THEN
     RAISE EXCEPTION 'Invalid reaction type.';
   END IF;
 

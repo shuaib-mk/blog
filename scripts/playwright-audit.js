@@ -73,9 +73,12 @@ async function runPlaywrightAudit() {
     { name: 'updates', path: '/updates' },
     { name: 'archive', path: '/archive' },
     { name: 'about', path: '/about' },
-    { name: 'entry_page', path: '/entry/sample-entry' },
-    { name: 'protected_entry', path: '/entry/protected-sample-entry' },
-    { name: 'popup_card', path: '/entry/sample-entry?quote=Sample+Quote+Card' }
+    // The live API no longer serves built-in sample entries; point these at
+    // real posts with AUDIT_ENTRY_SLUG / AUDIT_PROTECTED_SLUG when auditing
+    // a deployed site.
+    { name: 'entry_page', path: `/entry/${process.env.AUDIT_ENTRY_SLUG || 'sample-entry'}` },
+    { name: 'protected_entry', path: `/entry/${process.env.AUDIT_PROTECTED_SLUG || 'protected-sample-entry'}` },
+    { name: 'popup_card', path: `/entry/${process.env.AUDIT_ENTRY_SLUG || 'sample-entry'}?quote=Sample+Quote+Card` }
   ];
 
   let totalTests = 0;

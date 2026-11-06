@@ -47,9 +47,10 @@ test('Editor.jsx provides automatic slug syncing, custom slug toggle, and sync b
 });
 
 test('Server PUT endpoint normalizes slug and handles duplicate slug collisions', () => {
-  const serverPath = path.resolve('server/index.js');
+  // server/index.js now runs the production app from api/index.js.
+  const serverPath = path.resolve('api/index.js');
   const content = fs.readFileSync(serverPath, 'utf8');
 
   assert.ok(content.includes('entries_slug_key'), 'Server PUT should handle entries_slug_key collision');
-  assert.ok(content.includes('slugify(updates.title || title)'), 'Server should fallback to slugified title if slug is empty');
+  assert.ok(content.includes("updateData.slug = payload.title.toLowerCase()"), 'Server should fallback to slugified title if slug is empty');
 });
