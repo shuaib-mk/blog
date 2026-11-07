@@ -11,6 +11,20 @@
       html.dark { background-color: #0C0C0C; color-scheme: dark; }
     </style>
     <script>
+      // Home page: ask for the posts right away, while the app's code is still
+      // downloading (the app used to start this request only after ~2s of
+      // script loading). safeApiFetch() in src/supabase.js picks it up once.
+      (function () {
+        try {
+          if (location.pathname === '/' && window.fetch) {
+            var started = Date.now();
+            var req = fetch('/api/posts').then(function (r) { return r.ok ? r.text() : null; }).catch(function () { return null; });
+            window.__earlyApi = { '/api/posts': { promise: req, started: started } };
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <script>
       window.deferredInstallPrompt = null;
       window.addEventListener('beforeinstallprompt', function(e) {
         e.preventDefault();

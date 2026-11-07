@@ -90,7 +90,13 @@ export function dispatchRealtimeMutation(payload, { isLocal = false } = {}) {
     if (seen && !isLocal) return;
   }
 
-  if (payload.version || inner.version) {
+  // View counts and now-playing pings are frequent and don't touch the
+  // shared sync row the 10s fallback reads, so their version must not move
+  // our watermark: a view received right after an edit we MISSED would put
+  // the watermark past that edit's version and the fallback would never
+  // recover it.
+  const HIGH_FREQUENCY = ['entry_view_updated', 'now_playing', 'now_playing_updated'];
+  if ((payload.version || inner.version) && !HIGH_FREQUENCY.includes(eventType)) {
     lastKnownVersion = payload.version || inner.version;
   }
 
@@ -475,6 +481,14 @@ async function checkSyncVersion() {
     if (data && data.version) {
       if (lastKnownVersion !== null && data.version > lastKnownVersion) {
         const eventType = data.event || 'resync';
+        // A newer version here means this device missed at least one live
+        // notice, and the row only names the LAST event. If that isn't a
+        // post change, an earlier missed edit could hide behind it (e.g. a
+        // comment right after an edit), so refresh the posts as well.
+        const ENTRY_EVENTS = ['entry', 'entry_created', 'entry_updated', 'entry_deleted', 'resync', 'feed'];
+        if (!ENTRY_EVENTS.includes(eventType)) {
+          dispatchRealtimeMutation({ type: 'resync', version: data.version, broadcastId: `missed-${data.version}` });
+        }
         dispatchRealtimeMutation({
           type: eventType,
           version: data.version,
