@@ -86,7 +86,7 @@ export default function Activity() {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[var(--border-subtle)] hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-all font-medium self-start sm:self-auto"
         >
-          <span>Follow on GitHub</span>
+          <TypewriterText text="Follow on GitHub" />
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
       </div>

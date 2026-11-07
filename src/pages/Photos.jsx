@@ -180,10 +180,8 @@ export default function Photos() {
       ) : photos.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-[var(--border-subtle)] rounded-lg">
           <ImageIcon className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-3 opacity-50" />
-          <p className="font-serif text-lg text-[var(--text-primary)]">No photos published yet</p>
-          <p className="font-sans text-xs text-[var(--text-muted)] mt-1">
-            Check back soon for new visual captures.
-          </p>
+          <TypewriterText text="No photos published yet" as="p" className="font-serif text-lg text-[var(--text-primary)]" />
+          <TypewriterText text="Check back soon for new visual captures." as="p" className="font-sans text-xs text-[var(--text-muted)] mt-1" />
         </div>
       ) : (
         <>

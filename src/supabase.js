@@ -396,7 +396,17 @@ export async function safeApiFetch(url, options = {}) {
     const method = (fetchOptions.method || 'GET').toUpperCase();
     const shareable = method === 'GET' && !fetchOptions.body && !fetchOptions.headers && !fetchOptions.signal;
     let textPromise;
-    if (shareable && inflightGets.has(url)) {
+    // A request index.html started before the app loaded (home feed). Used
+    // once, and only while fresh, so later refetches (realtime updates) always
+    // go to the network.
+    const early = shareable && typeof window !== 'undefined' && window.__earlyApi && window.__earlyApi[url];
+    if (early) {
+      delete window.__earlyApi[url];
+      if (Date.now() - early.started < 15000) textPromise = early.promise.then(t => (t === null ? fetchText(url, fetchOptions, timeout) : t));
+    }
+    if (textPromise) {
+      // reuse the early request
+    } else if (shareable && inflightGets.has(url)) {
       textPromise = inflightGets.get(url);
     } else {
       textPromise = fetchText(url, fetchOptions, timeout);
